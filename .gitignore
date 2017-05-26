@@ -1,0 +1,5 @@
+*.tar
+*.pdf
+*.json
+.idea
+data
