@@ -3,3 +3,4 @@
 *.json
 .idea
 data
+*.bin.gz
