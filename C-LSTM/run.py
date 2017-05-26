@@ -2,6 +2,9 @@ import shorttext
 import clstm
 import json
 import sys
+from keras.datasets import imdb
+from shorttext.utils import tokenize
+import numpy as np
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -32,22 +35,63 @@ def parse_json(path):
 
     return data
 
+def get_word(x):
+    for word, index in word_index_dict.items():
+        if index == x:
+            return word
+
+    return "_error"
+
+def parse_imdb():
+    print('Loading data...')
+    (x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=5000)
+    print(len(x_train), 'train sequences')
+    print(len(x_test), 'test sequences')
+
+    print('Pad sequences (samples x time)')
+    x_train = sequence.pad_sequences(x_train, maxlen=400)
+    x_test = sequence.pad_sequences(x_test, maxlen=400)
+    print('x_train shape:', x_train.shape)
+    print('x_test shape:', x_test.shape)
+
+    word_index_dict = imdb.get_word_index()
+
+    x_train = [' '.join([get_word(x) for x in train]) for train in x_train]
+    x_test = [' '.join([get_word(x) for x in test]) for test in x_test]
+
+
 class DataYieldVarNNEmbeddedVecClassifier(shorttext.classifiers.VarNNEmbeddedVecClassifier):
-    def generate_trainingdata_from_json(self, path):
-        with open(path) as f:
-            for line in f:
-                star = json.loads(line)['stars']
-                review = json.loads(line)['text'].encode('utf-8')
-                if star == 1:
-                    temp = 'very negative'
-                elif star == 2:
-                    temp = 'negative'
-                elif star == 3:
-                    temp = 'neutral'
-                elif star == 4:
-                    temp = 'positive'
-                else:
-                    temp = 'very positive'
+    def convert_trainingdata_matrix_yield(self, classdict):
+        """ Convert the training data into format put into the neural networks.
+        Convert the training data into format put into the neural networks.
+        This is called by :func:`~train`.
+        :param classdict: training data
+        :return: a tuple of three, containing a list of class labels, matrix of embedded word vectors, and corresponding outputs
+        :type classdict: dict
+        :rtype: (list, numpy.ndarray, list)
+        """
+        classlabels = classdict.keys()
+        lblidx_dict = dict(zip(classlabels, range(len(classlabels))))
+
+        # tokenize the words, and determine the word length
+        phrases = []
+        indices = []
+        for label in classlabels:
+            for shorttext in classdict[label]:
+                shorttext = shorttext if type(shorttext) == str else ''
+                category_bucket = [0] * len(classlabels)
+                category_bucket[lblidx_dict[label]] = 1
+                indices.append(category_bucket)
+                phrases.append(tokenize(shorttext))
+
+        # store embedded vectors
+        indices = np.array(indices, dtype=np.int)
+        train_embedvec = np.zeros(shape=(len(phrases), self.maxlen, self.vecsize))
+        while 1:
+            for i in range(len(phrases)):
+                for j in range(min(self.maxlen, len(phrases[i]))):
+                    train_embedvec[i, j] = self.word_to_embedvec(phrases[i][j])
+                yield (train_embedvec[i:i+1], indices[i:i+1])
 
     def train(self, classdict, kerasmodel, nb_epoch=10):
         """ Train the classifier.
@@ -63,12 +107,13 @@ class DataYieldVarNNEmbeddedVecClassifier(shorttext.classifiers.VarNNEmbeddedVec
                 :type nb_epoch: int
                 """
         # convert classdict to training input vectors
-        self.classlabels, train_embedvec, indices = self.convert_trainingdata_matrix(classdict)
+        self.classlabels = classdict.keys()
+        #train_embedvec, indices = self.convert_trainingdata_matrix(classdict)
 
         # train the model
-        kerasmodel.fit(train_embedvec, indices, epochs=nb_epoch)
-        #kerasmodel.fit_generator(self.generate_trainingdata_from_json('C:/MCDD/dataset/yelp_academic_dataset_review.json'),
-        #                         steps_per_epoch=1000, epochs=nb_epoch)
+        #kerasmodel.fit(train_embedvec, indices, epochs=nb_epoch)
+        kerasmodel.fit_generator(self.convert_trainingdata_matrix_yield(classdict),
+                                 steps_per_epoch=len(self.classlabels), epochs=nb_epoch)
 
         # flag switch
         self.model = kerasmodel
@@ -79,7 +124,8 @@ if __name__ == '__main__':
     #trainclassdict = shorttext.data.subjectkeywords()
     trainclassdict = parse_json('./yelp_academic_dataset_review.json')
     kmodel = clstm.CLSTMWordEmbed(len(trainclassdict.keys()))
-    classifier = shorttext.classifiers.VarNNEmbeddedVecClassifier(wvmodel)
+    #classifier = shorttext.classifiers.VarNNEmbeddedVecClassifier(wvmodel)
+    classifier = DataYieldVarNNEmbeddedVecClassifier(wvmodel)
     classifier.train(trainclassdict, kmodel)
     while True:
         text = raw_input('Input short text to classify: ')
