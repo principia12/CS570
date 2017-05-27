@@ -65,7 +65,7 @@ def CLSTMWordEmbed(nb_labels,
                     )
               )
 
-    adam = optimizers.Adam(decay=0.01)
+    adam = optimizers.Adam(decay=0.0)
     model.compile(loss='categorical_crossentropy', optimizer=adam)
 
     return model

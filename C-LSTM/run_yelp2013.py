@@ -4,11 +4,16 @@ import json
 import sys
 from shorttext.utils import tokenize
 import numpy as np
+import random
 
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-BATCH_SIZE = 50
+BATCH_SIZE = 1000
+CLASSES = [0, 1, 2, 3, 4]
+
+class Review(object):
+	pass
 
 class DataYieldVarNNEmbeddedVecClassifier(shorttext.classifiers.VarNNEmbeddedVecClassifier):
     def convert_trainingdata_matrix_yield(self, classdict):
@@ -20,8 +25,8 @@ class DataYieldVarNNEmbeddedVecClassifier(shorttext.classifiers.VarNNEmbeddedVec
         :type classdict: dict
         :rtype: (list, numpy.ndarray, list)
         """
-        classlabels = classdict.keys()
-        lblidx_dict = dict(zip(classlabels, range(len(classlabels))))
+        classlabels = self.classlabels
+        #lblidx_dict = dict(zip(classlabels, range(len(classlabels))))
 
         # tokenize the words, and determine the word length
         #phrases = []
@@ -29,29 +34,26 @@ class DataYieldVarNNEmbeddedVecClassifier(shorttext.classifiers.VarNNEmbeddedVec
 
         cnt = 0
         while 1:
-			for label in classlabels:
-				for shorttext in classdict[label]:
-					shorttext = shorttext if type(shorttext) == str else ''
-					category_bucket = [0] * len(classlabels)
-					category_bucket[lblidx_dict[label]] = 1
+			random.shuffle(classdict)
+			for review in classdict:
+				review.text = review.text if type(review.text) == str else ''
+				category_bucket = [0.0] * len(classlabels)
+				category_bucket[review.cls] = 1.0
+				
+				phrases_i = tokenize(review.text)
+				
+				if cnt % BATCH_SIZE == 0:
+					x_train = np.zeros(shape=(BATCH_SIZE, self.maxlen, self.vecsize))
+					y_train = []
 
-					#indices.append(category_bucket)
-					#phrases.append(tokenize(shorttext))
-					
-					phrases_i = tokenize(shorttext)
-
-					if cnt % BATCH_SIZE == 0:
-						x_train = np.zeros(shape=(BATCH_SIZE, self.maxlen, self.vecsize))
-						y_train = []
-
-					for j in range(min(self.maxlen, len(phrases_i))):
-						x_train[cnt % BATCH_SIZE, j] = self.word_to_embedvec(phrases_i[j])
-					y_train.append(category_bucket)
-					
-					cnt += 1
-					if cnt % BATCH_SIZE == 0:
-						y_train = np.array(y_train, dtype=np.int)
-						yield (x_train, y_train)
+				for j in range(min(self.maxlen, len(phrases_i))):
+					x_train[cnt % BATCH_SIZE, j] = self.word_to_embedvec(phrases_i[j])
+				y_train.append(category_bucket)
+				
+				cnt += 1
+				if cnt % BATCH_SIZE == 0:
+					y_train = np.array(y_train, dtype=np.int)
+					yield (x_train, y_train)
 
         # store embedded vectors
         #indices = np.array(indices, dtype=np.int)
@@ -76,8 +78,8 @@ class DataYieldVarNNEmbeddedVecClassifier(shorttext.classifiers.VarNNEmbeddedVec
                 :type nb_epoch: int
                 """
         # convert classdict to training input vectors
-        self.classlabels = classdict.keys()
-        total_train = sum([len(classdict[cls]) for cls in classdict])
+        self.classlabels = CLASSES
+        total_train = len(classdict)
         print total_train
         #train_embedvec, indices = self.convert_trainingdata_matrix(classdict)
 
@@ -147,30 +149,54 @@ def parseText(filename):
     #        print 'len(res[%d]) is over 100' % i
     return res
 
+def parse_text_to_review(path):
+	data = []
+	with open(path) as f:
+		for line in f:
+			temp = line.strip().split('\t\t')
+			star = int(temp[2])
+			review = temp[3].replace('<sssss>', ' ')
+			
+			one_review = Review()
+			one_review.cls = star-1
+			one_review.text = review
+
+			data.append(one_review)
+			
+	return data
+
 if __name__ == '__main__':
     wvmodel = shorttext.utils.load_word2vec_model('../data/GoogleNews-vectors-negative300.bin.gz')
     #trainclassdict = shorttext.data.subjectkeywords()
     #trainclassdict = parse_json('./yelp_academic_dataset_review.json')
-    trainclassdict = parseText('../data/yelp/yelp-2013-train.txt.ss')
-    kmodel = clstm.CLSTMWordEmbed(len(trainclassdict.keys()), n_gram=3, maxlen=150, rnn_dropout=0.5, dense_wl2reg=0.001)
+    trainclassdict = parse_text_to_review('../data/yelp/yelp-2013-train.txt.ss')
+    kmodel = clstm.CLSTMWordEmbed(len(CLASSES), n_gram=3, maxlen=150, rnn_dropout=0.5, dense_wl2reg=0.001)
     #classifier = shorttext.classifiers.VarNNEmbeddedVecClassifier(wvmodel, maxlen=150)
     classifier = DataYieldVarNNEmbeddedVecClassifier(wvmodel, maxlen=150)
     classifier.train(trainclassdict, kmodel, nb_epoch=10)
 
-    testclassdict = parseText('../data/yelp/yelp-2013-test.txt.ss')
+    testclassdict = parse_text_to_review('../data/yelp/yelp-2013-test.txt.ss')
     cnt_correct = 0
     cnt_all = 0
-    for key in testclassdict:
-        for text in testclassdict[key]:
-            score = classifier.score(text)
-            max_prob = 0.0
-            max_class = None
-            for key_score in score:
-                if max_prob < score[key_score]:
-                    max_prob = score[key_score]
-                    max_class = key_score
-            if key == max_class:
-                cnt_correct += 1
-            cnt_all += 1
 
+    for review in testclassdict:
+		score = classifier.score(review.text)
+		max_prob = 0.0
+		max_class = None
+		for key_score in score:
+			if max_prob < score[key_score]:
+				max_prob = score[key_score]
+				max_class = key_score
+		if review.cls == max_class:
+			cnt_correct += 1
+		cnt_all += 1
+	
     print float(cnt_correct)/float(cnt_all)
+
+    while True:
+        text = raw_input('Input short text to classify: ')
+        text = text.strip()
+        if text == '-quit':
+            break
+        else:
+            print classifier.score(text)
