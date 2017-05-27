@@ -1,6 +1,7 @@
 from keras.layers import Convolution1D, MaxPooling1D, Dropout, LSTM, Dense
 from keras.models import Sequential
 from keras.regularizers import l2
+from keras import optimizers
 
 # C-LSTM
 # Chunting Zhou, Chonglin Sun, Zhiyuan Liu, Francis Lau,
@@ -63,6 +64,8 @@ def CLSTMWordEmbed(nb_labels,
                     W_regularizer=l2(dense_wl2reg)
                     )
               )
-    model.compile(loss='categorical_crossentropy', optimizer=optimizer)
+
+    adam = optimizers.Adam(decay=0.01)
+    model.compile(loss='categorical_crossentropy', optimizer=adam)
 
     return model
