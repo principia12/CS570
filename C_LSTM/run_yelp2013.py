@@ -6,10 +6,12 @@ from shorttext.utils import tokenize
 import numpy as np
 import random
 
+from utils.data import file_path, GOOGLE_NEWS_VECTORS, IMDB_TRAIN, IMDB_TEST, YELP_TRAIN, YELP_TEST
+
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-BATCH_SIZE = 1000
+BATCH_SIZE = 100
 CLASSES = [0, 1, 2, 3, 4]
 
 class Review(object):
@@ -165,17 +167,23 @@ def parse_text_to_review(path):
 			
 	return data
 
-if __name__ == '__main__':
-    wvmodel = shorttext.utils.load_word2vec_model('../data/GoogleNews-vectors-negative300.bin.gz')
+def main(TRAIN, TEST, max_rating, batch_size):
+    global BATCH_SIZE
+    global CLASSES
+
+    BATCH_SIZE = batch_size
+    CLASSES = range(max_rating)
+
+    wvmodel = shorttext.utils.load_word2vec_model(file_path(GOOGLE_NEWS_VECTORS))
     #trainclassdict = shorttext.data.subjectkeywords()
     #trainclassdict = parse_json('./yelp_academic_dataset_review.json')
-    trainclassdict = parse_text_to_review('../data/yelp/yelp-2013-train.txt.ss')
+    trainclassdict = parse_text_to_review(file_path(TRAIN))
     kmodel = clstm.CLSTMWordEmbed(len(CLASSES), n_gram=3, maxlen=150, rnn_dropout=0.5, dense_wl2reg=0.001)
     #classifier = shorttext.classifiers.VarNNEmbeddedVecClassifier(wvmodel, maxlen=150)
     classifier = DataYieldVarNNEmbeddedVecClassifier(wvmodel, maxlen=150)
     classifier.train(trainclassdict, kmodel, nb_epoch=10)
 
-    testclassdict = parse_text_to_review('../data/yelp/yelp-2013-test.txt.ss')
+    testclassdict = parse_text_to_review(file_path(TEST))
     cnt_correct = 0
     cnt_all = 0
 
@@ -200,3 +208,6 @@ if __name__ == '__main__':
             break
         else:
             print classifier.score(text)
+
+if __name__ == '__main__':
+    main(YELP_TRAIN, YELP_TEST, 5, 100)

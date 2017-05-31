@@ -6,6 +6,8 @@ from keras.datasets import imdb
 from shorttext.utils import tokenize
 import numpy as np
 
+from utils.data import file_path, GOOGLE_NEWS_VECTORS, YELP_ACADEMIC_DATASET_JSON
+
 reload(sys)
 sys.setdefaultencoding('utf8')
 
@@ -141,10 +143,10 @@ class DataYieldVarNNEmbeddedVecClassifier(shorttext.classifiers.VarNNEmbeddedVec
         self.model = kerasmodel
         self.trained = True
 
-if __name__ == '__main__':
-    wvmodel = shorttext.utils.load_word2vec_model('GoogleNews-vectors-negative300.bin.gz')
+def main():
+    wvmodel = shorttext.utils.load_word2vec_model(file_path(GOOGLE_NEWS_VECTORS))
     #trainclassdict = shorttext.data.subjectkeywords()
-    trainclassdict = parse_json('./yelp_academic_dataset_review.json')
+    trainclassdict = parse_json(file_path(YELP_ACADEMIC_DATASET_JSON))
     kmodel = clstm.CLSTMWordEmbed(len(trainclassdict.keys()), n_gram=3, maxlen=150, rnn_dropout=0.5, dense_wl2reg=0.001)
     #classifier = shorttext.classifiers.VarNNEmbeddedVecClassifier(wvmodel)
     classifier = DataYieldVarNNEmbeddedVecClassifier(wvmodel, maxlen=150)
@@ -156,3 +158,6 @@ if __name__ == '__main__':
             break
         else:
             print classifier.score(text)
+
+if __name__ == '__main__':
+    main()

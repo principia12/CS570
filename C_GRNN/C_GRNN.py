@@ -1,3 +1,4 @@
+import sys
 import nltk
 import string
 import numpy as np
@@ -9,6 +10,10 @@ from keras.models import Sequential
 from keras.regularizers import l2
 from keras import optimizers
 
+from utils.data import file_path, GOOGLE_NEWS_VECTORS, IMDB_TRAIN, IMDB_TEST, YELP_TRAIN, YELP_TEST
+
+reload(sys)
+sys.setdefaultencoding('utf8')
 
 BATCH_SIZE = 200
 max_len = 350
@@ -18,7 +23,7 @@ w2vecmodel = None
 def parse_text_to_review(path):
     data = []
     cnt = 0
-    with open(path, 'r', encoding='utf8') as f:
+    with open(path, 'r') as f:
         for line in f:
             temp = line.strip().split('\t\t')
             star = int(temp[2])
@@ -116,23 +121,26 @@ def C_GRNN(nb_labels,
     return model
 
 
-def main():
+def main(TRAIN, TEST, max_rating, batch_size):
     global w2vecmodel
     global BATCH_SIZE
     global NB_LABLES
 
+    BATCH_SIZE = batch_size
+    NB_LABLES = max_rating
+
     #classdict = parse_text_to_review('../data/yelp-2013-train.txt.ss')
-    classdict = parse_text_to_review('../data/imdb-train.txt.ss')
+    classdict = parse_text_to_review(file_path(TRAIN))
     total_train = len(classdict)
 
     #testdict = parse_text_to_review('../data/yelp-2013-test.txt.ss')
-    testdict = parse_text_to_review('../data/imdb-test.txt.ss')
+    testdict = parse_text_to_review(file_path(TEST))
     total_test = len(testdict)
 
 
     print ('Data load finished')
 
-    w2vecmodel = gensim.models.KeyedVectors.load_word2vec_format('../data/GoogleNews-vectors-negative300.bin', binary=True)
+    w2vecmodel = gensim.models.KeyedVectors.load_word2vec_format(file_path(GOOGLE_NEWS_VECTORS), binary=True)
     print( 'word2vec load finished...')
 
 
@@ -191,7 +199,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(YELP_TRAIN, YELP_TEST, 5, 100)
 
     '''
     model.fit(x_train, y_train,
