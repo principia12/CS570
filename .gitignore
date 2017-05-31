@@ -1,6 +1,9 @@
 *.tar
 *.pdf
 *.json
+*.pyc
+*.swp
+*.swo
 .idea
 data
 *.bin.gz
